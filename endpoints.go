@@ -1,4 +1,4 @@
-package catalogue
+package main
 
 // endpoints.go contains the endpoint definitions, including per-method request
 // and response structs. Endpoints are the binding between the service and
@@ -6,8 +6,8 @@ package catalogue
 
 import (
 	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/tracing/opentracing"
-	stdopentracing "github.com/opentracing/opentracing-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/net/context"
 )
 
@@ -22,19 +22,23 @@ type Endpoints struct {
 
 // MakeEndpoints returns an Endpoints structure, where each endpoint is
 // backed by the given service.
-func MakeEndpoints(s Service, tracer stdopentracing.Tracer) Endpoints {
+func MakeEndpoints(s Service) Endpoints {
 	return Endpoints{
-		ListEndpoint:   opentracing.TraceServer(tracer, "GET /catalogue")(MakeListEndpoint(s)),
-		CountEndpoint:  opentracing.TraceServer(tracer, "GET /catalogue/size")(MakeCountEndpoint(s)),
-		GetEndpoint:    opentracing.TraceServer(tracer, "GET /catalogue/{id}")(MakeGetEndpoint(s)),
-		TagsEndpoint:   opentracing.TraceServer(tracer, "GET /tags")(MakeTagsEndpoint(s)),
-		HealthEndpoint: opentracing.TraceServer(tracer, "GET /health")(MakeHealthEndpoint(s)),
+		ListEndpoint:   MakeListEndpoint(s),
+		CountEndpoint:  MakeCountEndpoint(s),
+		GetEndpoint:    MakeGetEndpoint(s),
+		TagsEndpoint:   MakeTagsEndpoint(s),
+		HealthEndpoint: MakeHealthEndpoint(s),
 	}
 }
 
 // MakeListEndpoint returns an endpoint via the given service.
 func MakeListEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		tr := otel.Tracer("MakeList")
+		_, span := tr.Start(ctx, "MakeList")
+		span.SetAttributes(attribute.Key("service").String("catalogue"))
+		defer span.End()
 		req := request.(listRequest)
 		socks, err := s.List(req.Tags, req.Order, req.PageNum, req.PageSize)
 		return listResponse{Socks: socks, Err: err}, err
@@ -44,6 +48,10 @@ func MakeListEndpoint(s Service) endpoint.Endpoint {
 // MakeCountEndpoint returns an endpoint via the given service.
 func MakeCountEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		tr := otel.Tracer("Count")
+		_, span := tr.Start(ctx, "Count")
+		span.SetAttributes(attribute.Key("service").String("catalogue"))
+		defer span.End()
 		req := request.(countRequest)
 		n, err := s.Count(req.Tags)
 		return countResponse{N: n, Err: err}, err
@@ -53,6 +61,10 @@ func MakeCountEndpoint(s Service) endpoint.Endpoint {
 // MakeGetEndpoint returns an endpoint via the given service.
 func MakeGetEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		tr := otel.Tracer("Get")
+		_, span := tr.Start(ctx, "Get")
+		span.SetAttributes(attribute.Key("service").String("catalogue"))
+		defer span.End()
 		req := request.(getRequest)
 		sock, err := s.Get(req.ID)
 		return getResponse{Sock: sock, Err: err}, err
@@ -62,6 +74,10 @@ func MakeGetEndpoint(s Service) endpoint.Endpoint {
 // MakeTagsEndpoint returns an endpoint via the given service.
 func MakeTagsEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		tr := otel.Tracer("Tags")
+		_, span := tr.Start(ctx, "Tags")
+		span.SetAttributes(attribute.Key("service").String("catalogue"))
+		defer span.End()
 		tags, err := s.Tags()
 		return tagsResponse{Tags: tags, Err: err}, err
 	}
@@ -70,6 +86,10 @@ func MakeTagsEndpoint(s Service) endpoint.Endpoint {
 // MakeHealthEndpoint returns current health of the given service.
 func MakeHealthEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		tr := otel.Tracer("Health")
+		_, span := tr.Start(ctx, "Health")
+		span.SetAttributes(attribute.Key("service").String("catalogue"))
+		defer span.End()
 		health := s.Health()
 		return healthResponse{Health: health}, nil
 	}

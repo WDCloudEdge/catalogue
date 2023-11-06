@@ -1,10 +1,16 @@
-package catalogue
+package main
 
 // service.go contains the definition and implementation (business logic) of the
 // catalogue service. Everything here is agnostic to the transport (HTTP).
 
 import (
+	"context"
+	"crypto/tls"
 	"errors"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -160,6 +166,10 @@ func (s *catalogueService) Get(id string) (Sock, error) {
 	sock.ImageURL = []string{sock.ImageURL_1, sock.ImageURL_2}
 	sock.Tags = strings.Split(sock.TagString, ",")
 
+	minioClient := sInitMinioClient()
+	lastIndex := strings.LastIndex(sock.ImageURL_1, "/")
+	objectName := sock.ImageURL_1[lastIndex+1:]
+	_, err = minioClient.GetObject(context.Background(), "sock", objectName, minio.GetObjectOptions{})
 	return sock, nil
 }
 
@@ -202,6 +212,13 @@ func (s *catalogueService) Tags() ([]string, error) {
 }
 
 func cut(socks []Sock, pageNum, pageSize int) []Sock {
+	minioClient := sInitMinioClient()
+	var logger log.Logger
+	{
+		logger = log.NewLogfmtLogger(os.Stderr)
+		logger = log.NewContext(logger).With("ts", log.DefaultTimestampUTC)
+		logger = log.NewContext(logger).With("caller", log.DefaultCaller)
+	}
 	if pageNum == 0 || pageSize == 0 {
 		return []Sock{} // pageNum is 1-indexed
 	}
@@ -213,6 +230,23 @@ func cut(socks []Sock, pageNum, pageSize int) []Sock {
 	if end > len(socks) {
 		end = len(socks)
 	}
+
+	for _, sock := range socks[start:end] {
+		logger.Log(sock.ImageURL_1)
+		lastIndex := strings.LastIndex(sock.ImageURL_1, "/")
+
+		if lastIndex != -1 {
+			// 使用切片操作获取从最后一个"/"字符到字符串末尾的子字符串
+			objectName := sock.ImageURL_1[lastIndex+1:]
+			ob, err := minioClient.GetObject(context.Background(), "sock", objectName, minio.GetObjectOptions{})
+			if err != nil {
+				logger.Log(err)
+			}
+			if ob != nil {
+				logger.Log("list:" + objectName)
+			}
+		}
+	}
 	return socks[start:end]
 }
 
@@ -223,4 +257,25 @@ func contains(s []string, e string) bool {
 		}
 	}
 	return false
+}
+func sInitMinioClient() *minio.Client {
+	var logger log.Logger
+	{
+		logger = log.NewLogfmtLogger(os.Stderr)
+		logger = log.NewContext(logger).With("ts", log.DefaultTimestampUTC)
+		logger = log.NewContext(logger).With("caller", log.DefaultCaller)
+	}
+	// 基本的配置信息
+	endpoint := "myminio-hl.horsecoder-minio.svc.cluster.local:9000"
+	accessKeyID := "KbbZXndsJvtcxYaTxxEn"
+	secretAccessKey := "LmiuWWyebHKSyjqAG5BVlpfYL0uxyOSVYm279Cqk"
+	// 初始化一个minio客户端对象
+	minioClient, _ := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: true,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	})
+	return minioClient
 }

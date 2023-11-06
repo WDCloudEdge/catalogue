@@ -1,4 +1,4 @@
-package catalogue
+package main
 
 import (
 	"os"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/jmoiron/sqlx"
-	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 )
 
 var (

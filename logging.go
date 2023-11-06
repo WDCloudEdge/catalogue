@@ -1,4 +1,4 @@
-package catalogue
+package main
 
 import (
 	"strings"

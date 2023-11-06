@@ -1,4 +1,4 @@
-package catalogue
+package main
 
 // transport.go contains the binding from endpoints to a concrete transport.
 // In our case we just use a REST-y HTTP transport.
@@ -12,22 +12,15 @@ import (
 
 	"github.com/go-kit/kit/circuitbreaker"
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/tracing/opentracing"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
-	stdopentracing "github.com/opentracing/opentracing-go"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sony/gobreaker"
 	"golang.org/x/net/context"
 )
 
 // MakeHTTPHandler mounts the endpoints into a REST-y HTTP handler.
-func MakeHTTPHandler(ctx context.Context, e Endpoints, imagePath string, logger log.Logger, tracer stdopentracing.Tracer) *mux.Router {
+func MakeHTTPHandler(ctx context.Context, e Endpoints, imagePath string, logger log.Logger) *mux.Router {
 	r := mux.NewRouter().StrictSlash(false)
-	options := []httptransport.ServerOption{
-		httptransport.ServerErrorLogger(logger),
-		httptransport.ServerErrorEncoder(encodeError),
-	}
 
 	// GET /catalogue       List
 	// GET /catalogue/size  Count
@@ -43,7 +36,6 @@ func MakeHTTPHandler(ctx context.Context, e Endpoints, imagePath string, logger 
 		}))(e.ListEndpoint),
 		decodeListRequest,
 		encodeListResponse,
-		append(options, httptransport.ServerBefore(opentracing.FromHTTPRequest(tracer, "GET /catalogue", logger)))...,
 	))
 	r.Methods("GET").Path("/catalogue/size").Handler(httptransport.NewServer(
 		ctx,
@@ -53,7 +45,6 @@ func MakeHTTPHandler(ctx context.Context, e Endpoints, imagePath string, logger 
 		}))(e.CountEndpoint),
 		decodeCountRequest,
 		encodeResponse,
-		append(options, httptransport.ServerBefore(opentracing.FromHTTPRequest(tracer, "GET /catalogue/size", logger)))...,
 	))
 	r.Methods("GET").Path("/catalogue/{id}").Handler(httptransport.NewServer(
 		ctx,
@@ -63,7 +54,6 @@ func MakeHTTPHandler(ctx context.Context, e Endpoints, imagePath string, logger 
 		}))(e.GetEndpoint),
 		decodeGetRequest,
 		encodeGetResponse, // special case, this one can have an error
-		append(options, httptransport.ServerBefore(opentracing.FromHTTPRequest(tracer, "GET /catalogue/{id}", logger)))...,
 	))
 	r.Methods("GET").Path("/tags").Handler(httptransport.NewServer(
 		ctx,
@@ -73,7 +63,6 @@ func MakeHTTPHandler(ctx context.Context, e Endpoints, imagePath string, logger 
 		}))(e.TagsEndpoint),
 		decodeTagsRequest,
 		encodeResponse,
-		append(options, httptransport.ServerBefore(opentracing.FromHTTPRequest(tracer, "GET /tags", logger)))...,
 	))
 	r.Methods("GET").PathPrefix("/catalogue/images/").Handler(http.StripPrefix(
 		"/catalogue/images/",
@@ -87,9 +76,7 @@ func MakeHTTPHandler(ctx context.Context, e Endpoints, imagePath string, logger 
 		}))(e.HealthEndpoint),
 		decodeHealthRequest,
 		encodeHealthResponse,
-		append(options, httptransport.ServerBefore(opentracing.FromHTTPRequest(tracer, "GET /health", logger)))...,
 	))
-	r.Handle("/metrics", promhttp.Handler())
 	return r
 }
 
